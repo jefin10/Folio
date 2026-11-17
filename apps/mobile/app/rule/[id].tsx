@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Text, View } from 'react-native';
 import { CARD_THEME_PRESETS, FREQUENCY_LABEL, formatDate, nextDue } from '@folio/core';
 import { useDeleteRule, useLedgerContext, useObligations, useOccurrences, useSkipOccurrence, useToday } from '@folio/api';
 import { Screen } from '../../src/components/Screen';
-import { Badge, CircleButton, Ghost, Money, Plate, PopButton, Section, Skeleton } from '../../src/components/ui';
+import { ActionSheet, Badge, CircleButton, Ghost, Money, Plate, PopButton, Section, Skeleton } from '../../src/components/ui';
 import { WalletCard, type Face } from '../../src/components/wallet';
 import { presetForDue } from '../../src/lib/presets';
 import { C, F } from '../../src/lib/theme';
@@ -13,6 +14,7 @@ const EMPTY: never[] = [];
 export default function RuleDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = useToday();
+  const [sheet, setSheet] = useState(false);
   const { items, rules } = useObligations(400);
   const occurrences = useOccurrences().data ?? EMPTY;
   const { accounts } = useLedgerContext();
@@ -74,18 +76,16 @@ export default function RuleDetail() {
         </Section>
       )}
       <View style={{ paddingHorizontal: 20, marginTop: 26, alignItems: 'flex-start' }}>
-        <Ghost
-          label="Delete"
-          icon="trash"
-          color={C.coral}
-          onPress={() =>
-            Alert.alert(`Delete ${rule.name}?`, undefined, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive', onPress: () => void del.mutateAsync(id).then(() => router.back()) },
-            ])
-          }
-        />
+        <Ghost label="Delete" icon="trash" color={C.coral} onPress={() => setSheet(true)} />
       </View>
+      <ActionSheet
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title={`Delete ${rule.name}?`}
+        sub="Its due dates and reminders go with it."
+        options={[{ label: 'Delete', icon: 'trash', danger: true, onPress: () => void del.mutateAsync(id).then(() => router.back()) }]}
+        cancelLabel="Cancel"
+      />
     </Screen>
   );
 }

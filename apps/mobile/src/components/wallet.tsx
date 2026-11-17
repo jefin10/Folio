@@ -10,7 +10,7 @@ import { useArtwork } from '../lib/photos';
 import { useUi } from '../lib/store';
 import { C, F } from '../lib/theme';
 import { StatusScrim } from './Screen';
-import { Icon, InstitutionBadge, Tap } from './ui';
+import { CircleButton, Icon, InstitutionBadge, Tap } from './ui';
 
 const W = Dimensions.get('window').width;
 export const WALLET_CARD_W = W - 40;
@@ -250,13 +250,16 @@ export function WalletList({ header, items, addLabel, onAdd, empty }: { header: 
 }
 
 /** Two headline numbers at the top of Cards / Debit / EMIs. */
-export function WalletHeader({ title, onAdd, left, right }: { title: string; onAdd: () => void; left: { label: string; value: Paise; tone?: string }; right: { label: string; value: Paise; tone?: string } }) {
+export function WalletHeader({ title, onAdd, onBack, left, right }: { title: string; onAdd: () => void; onBack?: () => void; left: { label: string; value: Paise; tone?: string }; right: { label: string; value: Paise; tone?: string } }) {
   const hidden = useUi((s) => s.hideBalances);
   const fmt = (v: Paise) => (hidden ? '₹ ••••' : formatMoney(v, { decimals: 0 }));
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 22 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 44 }}>
-        <Text style={{ color: C.chalk, fontFamily: F.extrabold, fontSize: 30, letterSpacing: -0.6 }}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {onBack ? <CircleButton icon="arrowLeft" label="Back" onPress={onBack} /> : null}
+          <Text style={{ color: C.chalk, fontFamily: F.extrabold, fontSize: 30, letterSpacing: -0.6 }}>{title}</Text>
+        </View>
         <Tap onPress={onAdd} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.lineStrong }} pressedStyle={{ backgroundColor: C.ink3 }}>
           <Icon name="plus" size={18} color={C.chalk} />
         </Tap>

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Alert, Share, Text, View } from 'react-native';
+import { Share, Text, View } from 'react-native';
 import { success, warn } from '../lib/haptics';
 import { C, F } from '../lib/theme';
 import { eraseVault, exportVault, importVault, vaultIndex, VaultResetByAndroid } from '../lib/vault';
-import { Ghost, Input, Plate, PopButton } from './ui';
+import { ActionSheet, Ghost, Input, Plate, PopButton } from './ui';
 
 /** Vault housekeeping: password-encrypted backup, restore, erase. */
 export function VaultSettings() {
@@ -14,6 +14,8 @@ export function VaultSettings() {
   const [backup, setBackup] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restored, setRestored] = useState<number | null>(null);
+  const [sheet, setSheet] = useState(false);
 
   const refresh = () => void vaultIndex().then((ids) => setCount(ids.length));
   useEffect(refresh, []);
@@ -48,7 +50,7 @@ export function VaultSettings() {
       setBusy(true);
       const n = await importVault(backup, pw);
       success();
-      Alert.alert('Vault restored', `${n} item${n === 1 ? '' : 's'}`);
+      setRestored(n);
       reset();
       refresh();
     } catch (e) {
@@ -89,21 +91,26 @@ export function VaultSettings() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             <PopButton size="sm" tone="dark" label="Encrypted backup" icon="download" disabled={count === 0} onPress={() => setMode('export')} />
             <PopButton size="sm" tone="dark" label="Restore" icon="upload" onPress={() => setMode('import')} />
-            <Ghost
-              label="Erase"
-              icon="trash"
-              color={C.coral}
-              onPress={() =>
-                Alert.alert('Erase the vault from this phone?', 'Only an encrypted backup can bring it back.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Erase', style: 'destructive', onPress: () => void eraseVault().then(refresh) },
-                ])
-              }
-            />
+            <Ghost label="Erase" icon="trash" color={C.coral} onPress={() => setSheet(true)} />
           </View>
         )}
         {error && <Text style={{ color: C.coral, fontFamily: F.semibold, fontSize: 12 }}>{error}</Text>}
       </Plate>
+      <ActionSheet
+        open={restored !== null}
+        onClose={() => setRestored(null)}
+        title="Vault restored"
+        sub={`${restored ?? 0} item${restored === 1 ? '' : 's'} back in this phone's vault.`}
+        options={[{ label: 'Got it', icon: 'check', onPress: () => {} }]}
+      />
+      <ActionSheet
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title="Erase the vault from this phone?"
+        sub="Only an encrypted backup can bring it back."
+        options={[{ label: 'Erase', icon: 'trash', danger: true, onPress: () => void eraseVault().then(refresh) }]}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }

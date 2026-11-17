@@ -1,12 +1,12 @@
 import * as Clipboard from 'expo-clipboard';
 import * as ScreenCapture from 'expo-screen-capture';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { checkVaultEntry, type VaultEntry } from '@folio/core';
 import { success, tick, warn } from '../lib/haptics';
 import { C, F } from '../lib/theme';
 import { deleteEntry, lockVault, onVaultLock, readEntry, saveEntry, vaultIndex, VaultResetByAndroid } from '../lib/vault';
-import { Ghost, Icon, Input, Plate, PopButton, Tap } from './ui';
+import { ActionSheet, Ghost, Icon, Input, Plate, PopButton, Tap } from './ui';
 
 type FieldKey = 'cardNumber' | 'expiry' | 'nameOnCard' | 'accountNumber' | 'ifsc' | 'customerId' | 'upiId' | 'notes';
 const LABEL: Record<FieldKey, string> = {
@@ -33,6 +33,7 @@ export function VaultSection({ accountId, fields }: { accountId: string; fields:
   const [editing, setEditing] = useState<Partial<Record<FieldKey, string>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sheet, setSheet] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hide = useCallback(() => {
@@ -157,27 +158,7 @@ export function VaultSection({ accountId, fields }: { accountId: string; fields:
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
             <Ghost label="Hide" icon="eyeOff" onPress={hide} />
             <Ghost label="Edit" icon="edit" onPress={() => setEditing(Object.fromEntries(fields.map((k) => [k, k === 'cardNumber' && entry[k] ? groupDigits(entry[k]!) : entry[k] ?? ''])))} />
-            <Ghost
-              label="Delete"
-              icon="trash"
-              color={C.coral}
-              onPress={() =>
-                Alert.alert('Delete private details?', undefined, [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () =>
-                      void deleteEntry(accountId)
-                        .then(() => {
-                          setHas(false);
-                          hide();
-                        })
-                        .catch(failure),
-                  },
-                ])
-              }
-            />
+            <Ghost label="Delete" icon="trash" color={C.coral} onPress={() => setSheet(true)} />
           </View>
         </View>
       ) : has ? (
@@ -197,6 +178,14 @@ export function VaultSection({ accountId, fields }: { accountId: string; fields:
         <PopButton size="sm" tone="dark" label="Add private details" icon="plus" onPress={() => setEditing({})} />
       )}
       {error && <Text style={{ color: C.coral, fontFamily: F.semibold, fontSize: 12 }}>{error}</Text>}
+      <ActionSheet
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title="Delete private details?"
+        sub="They leave this phone's vault for good."
+        options={[{ label: 'Delete', icon: 'trash', danger: true, onPress: () => void deleteEntry(accountId).then(() => { setHas(false); hide(); }).catch(failure) }]}
+        cancelLabel="Cancel"
+      />
     </Plate>
   );
 }

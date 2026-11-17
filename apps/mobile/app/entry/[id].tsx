@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { displayName, ENTRY_TYPE_LABEL, formatDate, formatMoney } from '@folio/core';
 import { useEntry, useEntryRevisions, useRestoreEntry, useVoidEntry } from '@folio/api';
 import { useLookups } from '../../src/components/entries';
 import { Screen } from '../../src/components/Screen';
-import { Badge, Money, Plate, PopButton, Section, Skeleton } from '../../src/components/ui';
+import { ActionSheet, Badge, Money, Plate, PopButton, Section, Skeleton } from '../../src/components/ui';
 import { success } from '../../src/lib/haptics';
 import { C, F } from '../../src/lib/theme';
 
@@ -16,7 +16,7 @@ export default function EntryDetail() {
   const l = useLookups();
   const voidEntry = useVoidEntry();
   const restore = useRestoreEntry();
-  const [busy, setBusy] = useState(false);
+  const [sheet, setSheet] = useState(false);
   if (!e) return <Screen back><Skeleton height={200} style={{ margin: 20 }} /></Screen>;
   const leg = (p: (typeof e.postings)[number]) =>
     p.target === 'account' ? (l.accounts.get(p.accountId!) ? displayName(l.accounts.get(p.accountId!)!) : 'Account') : p.target === 'category' ? l.categories.get(p.categoryId!)?.name ?? 'Category' : p.target === 'person' ? l.people.get(p.personId!)?.name ?? 'Person' : 'Opening equity';
@@ -62,11 +62,19 @@ export default function EntryDetail() {
       <View style={{ paddingHorizontal: 20, marginTop: 28, gap: 12 }}>
         {editable && <PopButton tone="chalk" label="Edit" icon="edit" onPress={() => router.push({ pathname: '/add', params: { editId: e.id! } })} />}
         {e.status === 'posted' ? (
-          <PopButton tone="dark" label="Void" icon="trash" loading={busy} onPress={() => Alert.alert('Void this entry?', 'Balances will ignore it. History is kept and you can restore it.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Void', style: 'destructive', onPress: async () => { setBusy(true); await voidEntry.mutateAsync({ id: e.id! }); setBusy(false); success(); } }])} />
+          <PopButton tone="dark" label="Void" icon="trash" onPress={() => setSheet(true)} />
         ) : (
           <PopButton tone="dark" label="Restore" icon="history" loading={restore.isPending} onPress={() => void restore.mutateAsync(e.id!).then(success)} />
         )}
       </View>
+      <ActionSheet
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title="Void this entry?"
+        sub="Balances will ignore it. History is kept and you can restore it."
+        options={[{ label: 'Void', icon: 'trash', danger: true, onPress: async () => { await voidEntry.mutateAsync({ id: e.id! }); success(); } }]}
+        cancelLabel="Cancel"
+      />
     </Screen>
   );
 }

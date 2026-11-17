@@ -1,13 +1,14 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addMonths, formatDate as fmtDate, parseFlexibleDate, ACCOUNT_TYPE_META, CARD_PRODUCTS, CARD_THEME_PRESETS, computeEmi, containsSensitiveCardData, findInstitution, formatMoney, groupOf, searchInstitutions, themeFromInstitution, today, tryParseAmount, type AccountType, type CardNetwork, type CardProduct, type CardTheme, type CatalogInstitution } from '@folio/core';
+import { addMonths, ACCOUNT_TYPE_META, CARD_PRODUCTS, CARD_THEME_PRESETS, computeEmi, containsSensitiveCardData, findInstitution, formatMoney, groupOf, searchInstitutions, themeFromInstitution, today, tryParseAmount, type AccountType, type CardNetwork, type CardProduct, type CardTheme, type CatalogInstitution } from '@folio/core';
 import { repo, useAccountStatus, useAccounts, useFolio, useRules, useSaveAccount, useSaveInstitution, useSaveRule } from '@folio/api';
 import { FinanceCard } from '../src/components/cards';
-import { AmountInput, Chip, CircleButton, Eyebrow, Field, Ghost, Icon, Input, InstitutionBadge, PopButton, Segmented } from '../src/components/ui';
+import { DateField } from '../src/components/date-field';
+import { ActionSheet, AmountInput, Chip, CircleButton, Eyebrow, Field, Ghost, Icon, Input, InstitutionBadge, PopButton, Segmented } from '../src/components/ui';
 import { success, warn } from '../src/lib/haptics';
 import { C, F } from '../src/lib/theme';
 
@@ -56,6 +57,7 @@ export default function AccountEdit() {
   const [emiDay, setEmiDay] = useState('');
   const [logoUri, setLogoUri] = useState<string | null>(null);
   const [cardPhoto, setCardPhoto] = useState<string | null>(null);
+  const [sheet, setSheet] = useState(false);
   const [productId, setProductId] = useState<string | null>(null);
   const [annualFee, setAnnualFee] = useState<bigint | null>(null);
   const [ltf, setLtf] = useState(false);
@@ -104,8 +106,8 @@ export default function AccountEdit() {
     setPrincipal(plain(existing.loan?.principalAmount));
     setEmiDay(existing.loan?.emiDay?.toString() ?? '');
     const sd = existing.loan?.startDate;
-    setFirstEmi(sd ? fmtDate(sd) : '');
-    setLastEmi(sd && existing.loan?.tenureMonths ? fmtDate(addMonths(sd, existing.loan.tenureMonths - 1, existing.loan.emiDay ?? undefined)) : '');
+    setFirstEmi(sd ?? '');
+    setLastEmi(sd && existing.loan?.tenureMonths ? addMonths(sd, existing.loan.tenureMonths - 1, existing.loan.emiDay ?? undefined) : '');
     setEmiFrom(existing.loan?.emiAccountId ?? null);
   }, [existing]);
 
@@ -114,8 +116,8 @@ export default function AccountEdit() {
   const isLoan = group === 'loan';
   const results = useMemo(() => searchInstitutions(institution, 8), [institution]);
   const banks = accounts.filter((a) => (groupOf(a) === 'bank' || a.type === 'wallet') && a.status === 'active');
-  const first = parseFlexibleDate(firstEmi);
-  const last = parseFlexibleDate(lastEmi);
+  const first = firstEmi || null;
+  const last = lastEmi || null;
   const tenureFromDates = first && last && last >= first ? (Number(last.slice(0, 4)) - Number(first.slice(0, 4))) * 12 + (Number(last.slice(5, 7)) - Number(first.slice(5, 7))) + 1 : null;
   const suggested = useMemo(() => {
     const p = tryParseAmount(principal);
@@ -195,6 +197,10 @@ export default function AccountEdit() {
       // A loan's EMI becomes a monthly obligation: due dates, end date, reminders, "mark paid".
       const emiAmt = tryParseAmount(emi) ?? suggested;
       if (isLoan && first && emiAmt) {
+        const day = Number(first.slice(8));
+        const t = today();
+        let startOn = first;
+        while (startOn < t) startOn = addMonths(startOn, 1, day);
         const prev = rules.find((r) => r.kind === 'emi' && r.targetAccountId === id);
         await saveRule.mutateAsync({
           id: prev?.id,
@@ -204,10 +210,10 @@ export default function AccountEdit() {
           isVariable: false,
           frequency: 'monthly',
           intervalDays: null,
-          startOn: first,
+          startOn,
           endOn: last ?? null,
           maxOccurrences: null,
-          dayOfMonth: Number(first.slice(8)),
+          dayOfMonth: day,
           sourceAccountId: emiFrom,
           targetAccountId: id,
           categoryId: null,
@@ -360,12 +366,12 @@ export default function AccountEdit() {
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <View style={{ flex: 1 }}>
                 <Field label="First EMI">
-                  <Input value={firstEmi} onChangeText={setFirstEmi} placeholder="DD/MM/YYYY" keyboardType="numbers-and-punctuation" />
+                  <DateField value={firstEmi || null} onChange={(d) => setFirstEmi(d ?? '')} />
                 </Field>
               </View>
               <View style={{ flex: 1 }}>
                 <Field label="Last EMI">
-                  <Input value={lastEmi} onChangeText={setLastEmi} placeholder="DD/MM/YYYY" keyboardType="numbers-and-punctuation" />
+                  <DateField optional value={lastEmi || null} onChange={(d) => setLastEmi(d ?? '')} />
                 </Field>
               </View>
             </View>
@@ -406,22 +412,26 @@ export default function AccountEdit() {
           </View>
         )}
 
-        {existing && (
-          <Ghost
-            label={existing.status === 'active' ? 'Archive account' : 'Restore account'}
-            icon="archive"
-            onPress={() =>
-              Alert.alert(existing.status === 'active' ? 'Archive this account?' : 'Restore this account?', 'Its history is kept either way.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'OK', onPress: () => void setStatus.mutateAsync({ id: existing.id, status: existing.status === 'active' ? 'archived' : 'active' }).then(() => router.back()) },
-              ])
-            }
-          />
-        )}
+        {existing && <Ghost label={existing.status === 'active' ? 'Archive account' : 'Restore account'} icon="archive" onPress={() => setSheet(true)} />}
       </ScrollView>
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingBottom: insets.bottom + 14, backgroundColor: C.ink1, borderTopWidth: 1, borderTopColor: C.line }}>
         <PopButton tone="mint" size="lg" label={existing ? 'Save' : 'Add account'} onPress={submit} disabled={!valid} loading={save.isPending} />
       </View>
+      <ActionSheet
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title={existing!.status === 'active' ? 'Archive this account?' : 'Restore this account?'}
+        sub="Its history is kept either way."
+        options={[
+          {
+            label: existing!.status === 'active' ? 'Archive' : 'Restore',
+            icon: 'archive',
+            danger: existing!.status === 'active',
+            onPress: () => void setStatus.mutateAsync({ id: existing!.id, status: existing!.status === 'active' ? 'archived' : 'active' }).then(() => router.back()),
+          },
+        ]}
+        cancelLabel="Cancel"
+      />
     </KeyboardAvoidingView>
   );
 }

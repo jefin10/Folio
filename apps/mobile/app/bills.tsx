@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 import { FREQUENCY_LABEL, relativeDay, tryParseAmount, type Frequency, type RecurringKind } from '@folio/core';
 import { useLedgerContext, useObligations, useSaveRule, useSkipOccurrence, useToday } from '@folio/api';
 import { Screen } from '../src/components/Screen';
+import { DateField } from '../src/components/date-field';
 import { AmountInput, Badge, Chip, Empty, Field, Ghost, Icon, Input, Money, Plate, PopButton, Section } from '../src/components/ui';
 import { success } from '../src/lib/haptics';
 import { presetForDue } from '../src/lib/presets';
@@ -42,7 +43,7 @@ export default function Bills() {
             <Field label="Name"><Input value={name} onChangeText={setName} placeholder="Netflix, rent, Jio…" /></Field>
             <Field label="Amount (blank if it varies)"><AmountInput value={amount} onChange={setAmount} /></Field>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{FREQS.map((f) => <Chip key={f} label={FREQUENCY_LABEL[f]} active={freq === f} onPress={() => setFreq(f)} />)}</View>
-            <Field label="Next due date (YYYY-MM-DD)"><Input value={start} onChangeText={setStart} /></Field>
+            <Field label="Next due date"><DateField value={start || null} onChange={(d) => setStart(d ?? '')} /></Field>
             <Field label={kind === 'income' ? 'Paid by' : 'Paid from'}><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{accounts.filter((a) => a.status === 'active' && a.type !== 'debit_card').map((a) => <Chip key={a.id} label={a.nickname || a.name} active={src === a.id} onPress={() => setSrc(a.id)} />)}</View></Field>
             {needsTarget && <Field label={kind === 'emi' ? 'Loan' : kind === 'card_autopay' ? 'Card' : 'Received in'}><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{targets.map((a) => <Chip key={a.id} label={a.nickname || a.name} active={dst === a.id} onPress={() => setDst(a.id)} />)}</View></Field>}
             <PopButton tone="mint" label="Save" disabled={!name.trim() || (needsTarget && !dst) || !/^\d{4}-\d{2}-\d{2}$/.test(start)} loading={save.isPending} onPress={async () => {

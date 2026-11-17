@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View, type PressableProps, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, Text, TextInput, View, type PressableProps, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { findInstitution, formatCompact, formatMoney, inkOn, moneyParts, type Paise } from '@folio/core';
@@ -364,3 +365,54 @@ export const T = ({ children, style, dim, faint, numberOfLines }: { children: Re
     {children}
   </Text>
 );
+
+// ---------------------------------------------------------------------------
+// ActionSheet
+// ---------------------------------------------------------------------------
+
+export interface SheetOption {
+  label: string;
+  icon?: string;
+  danger?: boolean;
+  onPress: () => void;
+}
+
+/** The app's only dialog: a Folio bottom sheet. Native Alert dialogs are banned. */
+export function ActionSheet({ open, onClose, title, sub, options, cancelLabel }: { open: boolean; onClose: () => void; title: string; sub?: string; options: SheetOption[]; cancelLabel?: string }) {
+  const insets = useSafeAreaInsets();
+  const act = (fn: () => void) => {
+    tick();
+    onClose();
+    fn();
+  };
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.62)' }} onPress={onClose} />
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: C.ink1, borderWidth: 1, borderBottomWidth: 0, borderColor: C.line, paddingTop: 18, paddingBottom: insets.bottom + 14, paddingHorizontal: 18 }}>
+        <Text style={{ color: C.chalk, fontFamily: F.extrabold, fontSize: 17 }}>{title}</Text>
+        {sub ? <Text style={{ color: C.mute, fontFamily: F.sans, fontSize: 13, marginTop: 4 }}>{sub}</Text> : null}
+        <View style={{ gap: 6, marginTop: 14 }}>
+          {options.map((o) => (
+            <Tap
+              key={o.label}
+              onPress={() => act(o.onPress)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, height: 52, borderRadius: 14, paddingHorizontal: 12, backgroundColor: C.ink2, borderWidth: 1, borderColor: C.line }}
+              pressedStyle={{ backgroundColor: C.ink3, borderColor: o.danger ? C.coral : C.line }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: C.ink3, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={o.icon ?? 'dots'} size={19} color={o.danger ? C.coral : C.mint} />
+              </View>
+              <Text style={{ flex: 1, color: o.danger ? C.coral : C.chalk, fontFamily: F.bold, fontSize: 15 }}>{o.label}</Text>
+              <Icon name="chevronRight" size={17} color={C.faint} />
+            </Tap>
+          ))}
+        </View>
+        {cancelLabel ? (
+          <Tap onPress={() => act(() => {})} style={{ height: 46, alignItems: 'center', justifyContent: 'center', marginTop: 10 }}>
+            <Text style={{ color: C.chalkDim, fontFamily: F.bold, fontSize: 14 }}>{cancelLabel}</Text>
+          </Tap>
+        ) : null}
+      </View>
+    </Modal>
+  );
+}

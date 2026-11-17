@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
+import { useState } from 'react';
 import { CARD_THEME_PRESETS, formatDate, formatMoney, groupOf, nextDue, sortAccounts, type RecurringRule } from '@folio/core';
 import { loanDates, monthlyEquivalent } from '../../src/lib/emis';
 
 const PER: Record<string, string> = { weekly: '/wk', monthly: '/mo', quarterly: '/qtr', half_yearly: '/6 mo', yearly: '/yr' };
 import { useObligations, useOccurrences, usePosition, useToday } from '@folio/api';
-import { Empty, PopButton } from '../../src/components/ui';
+import { ActionSheet, Empty, PopButton } from '../../src/components/ui';
 import { faceOf, WalletHeader, WalletList, type Face, type WalletItem } from '../../src/components/wallet';
 
 function ruleFace(r: RecurringRule): Face {
@@ -49,20 +49,28 @@ export default function Emis() {
 
   const perMonth = [...loans.map((l) => emiRuleFor(l.id)?.amount ?? l.loan?.emiAmount ?? 0n), ...subs.map(monthlyEquivalent)].reduce((s, v) => s + v, 0n);
   const due30 = due.filter((i) => (i.kind === 'emi' || i.kind === 'subscription') && i.state !== 'paid' && i.state !== 'skipped').reduce((s, i) => s + (i.amount ?? 0n), 0n);
-  const add = () =>
-    Alert.alert('Add', undefined, [
-      { text: 'Loan with EMI', onPress: () => router.push({ pathname: '/account-edit', params: { type: 'vehicle_loan' } }) },
-      { text: 'Subscription', onPress: () => router.push({ pathname: '/rule-edit', params: { kind: 'subscription' } }) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+  const [sheet, setSheet] = useState(false);
+  const add = () => setSheet(true);
 
   return (
-    <WalletList
-      header={<WalletHeader title="EMIs" onAdd={add} left={{ label: 'Per month', value: perMonth }} right={{ label: 'Due in 30 days', value: due30 }} />}
-      items={items}
-      addLabel="Add"
-      onAdd={add}
-      empty={<Empty icon="loan" title="No EMIs or subscriptions" action={<PopButton tone="mint" label="Add" icon="plus" onPress={add} />} />}
-    />
+    <>
+      <WalletList
+        header={<WalletHeader title="EMIs" onAdd={add} left={{ label: 'Per month', value: perMonth }} right={{ label: 'Due in 30 days', value: due30 }} />}
+        items={items}
+        addLabel="Add"
+        onAdd={add}
+        empty={<Empty icon="loan" title="No EMIs or subscriptions" action={<PopButton tone="mint" label="Add" icon="plus" onPress={add} />} />}
+      />
+      <ActionSheet
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title="Add"
+        options={[
+          { label: 'Loan with EMI', icon: 'loan', onPress: () => router.push({ pathname: '/account-edit', params: { type: 'vehicle_loan' } }) },
+          { label: 'Subscription', icon: 'repeat', onPress: () => router.push({ pathname: '/rule-edit', params: { kind: 'subscription' } }) },
+        ]}
+        cancelLabel="Cancel"
+      />
+    </>
   );
 }

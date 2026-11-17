@@ -2,8 +2,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatDate, formatMoney, FREQUENCY_LABEL, parseFlexibleDate, today, tryParseAmount, type Frequency, type RecurringKind } from '@folio/core';
+import { formatMoney, FREQUENCY_LABEL, today, tryParseAmount, type Frequency, type RecurringKind } from '@folio/core';
 import { useLedgerContext, useRules, useSaveRule } from '@folio/api';
+import { DateField } from '../src/components/date-field';
 import { AmountInput, Chip, CircleButton, Field, Input, PopButton } from '../src/components/ui';
 import { success, warn } from '../src/lib/haptics';
 import { C, F } from '../src/lib/theme';
@@ -21,7 +22,7 @@ export default function RuleEdit() {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('monthly');
-  const [next, setNext] = useState(formatDate(today()));
+  const [next, setNext] = useState<string>(today());
   const [end, setEnd] = useState('');
   const [source, setSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +32,8 @@ export default function RuleEdit() {
     setName(existing.name);
     setAmount(existing.amount ? formatMoney(existing.amount, { symbol: '', decimals: 'auto' }).replace(/,/g, '') : '');
     setFrequency(existing.frequency);
-    setNext(formatDate(existing.startOn));
-    setEnd(existing.endOn ? formatDate(existing.endOn) : '');
+    setNext(existing.startOn);
+    setEnd(existing.endOn ?? '');
     setSource(existing.sourceAccountId);
   }, [existing]);
 
@@ -42,13 +43,13 @@ export default function RuleEdit() {
 
   const submit = async () => {
     setError(null);
-    const start = parseFlexibleDate(next);
-    const endOn = end.trim() ? parseFlexibleDate(end) : null;
+    const start = next;
+    const endOn = end || null;
     const amt = tryParseAmount(amount);
     if (!name.trim()) return setError('Name it');
     if (!amt || amt <= 0n) return setError('Enter the amount');
-    if (!start) return setError('Next due date as DD/MM/YYYY');
-    if (end.trim() && !endOn) return setError('End date as DD/MM/YYYY');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return setError('Pick the next due date');
+    if (end && !/^\d{4}-\d{2}-\d{2}$/.test(end)) return setError('Pick the end date');
     if (endOn && endOn < start) return setError('End date is before the next due date');
     try {
       await save.mutateAsync({
@@ -104,12 +105,12 @@ export default function RuleEdit() {
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <View style={{ flex: 1 }}>
             <Field label="Next due">
-              <Input value={next} onChangeText={setNext} placeholder="DD/MM/YYYY" keyboardType="numbers-and-punctuation" />
+              <DateField value={next || null} onChange={(d) => setNext(d ?? '')} />
             </Field>
           </View>
           <View style={{ flex: 1 }}>
             <Field label="Ends">
-              <Input value={end} onChangeText={setEnd} placeholder="DD/MM/YYYY" keyboardType="numbers-and-punctuation" />
+              <DateField optional value={end || null} onChange={(d) => setEnd(d ?? '')} />
             </Field>
           </View>
         </View>

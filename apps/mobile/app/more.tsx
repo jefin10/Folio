@@ -7,6 +7,8 @@ import { tick } from '../src/lib/haptics';
 import { C, F } from '../src/lib/theme';
 
 const LINKS = [
+  { href: '/ledger', label: 'Ledger', icon: 'receipt', sub: 'Every entry, searchable' },
+  { href: '/grow', label: 'Grow', icon: 'sprout', sub: 'FDs, RDs, stocks, mutual funds' },
   { href: '/accounts', label: 'Accounts', icon: 'bank', sub: 'Banks, cash, wallets, deposits' },
   { href: '/people', label: 'Owed to you', icon: 'users', sub: 'Reimbursements & splits' },
   { href: '/loans', label: 'Loans & EMIs', icon: 'loan', sub: 'Principal, interest, schedule' },

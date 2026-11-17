@@ -10,10 +10,8 @@ type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tab
 
 const TABS: Record<string, { label: string; icon: string }> = {
   index: { label: 'Home', icon: 'chart' },
-  ledger: { label: 'Ledger', icon: 'receipt' },
   cards: { label: 'Cards', icon: 'card' },
   debit: { label: 'Debit', icon: 'bank' },
-  grow: { label: 'Grow', icon: 'sprout' },
   emis: { label: 'EMIs', icon: 'loan' },
 };
 
@@ -21,8 +19,8 @@ const TABS: Record<string, { label: string; icon: string }> = {
 function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const routes = state.routes;
-  const left = routes.slice(0, 3);
-  const right = routes.slice(3);
+  const left = routes.slice(0, 2);
+  const right = routes.slice(2);
   const item = (r: (typeof routes)[number]) => {
     const i = routes.indexOf(r);
     const focused = state.index === i;
@@ -70,10 +68,8 @@ export default function TabsLayout() {
   return (
     <Tabs screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: C.ink } }} tabBar={(p) => <TabBar {...p} />}>
       <Tabs.Screen name="index" />
-      <Tabs.Screen name="ledger" />
       <Tabs.Screen name="cards" />
       <Tabs.Screen name="debit" />
-      <Tabs.Screen name="grow" />
       <Tabs.Screen name="emis" />
     </Tabs>
   );
