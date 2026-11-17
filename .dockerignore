@@ -1,0 +1,16 @@
+**/node_modules
+**/.next
+**/.expo
+**/dist
+**/build
+**/.gradle
+apps/mobile/android
+apps/mobile/ios
+apps/wear
+.git
+**/*.log
+**/.env
+**/.env.local
+deploy/.env
+deploy/tunnel
+docs

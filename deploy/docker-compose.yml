@@ -1,0 +1,175 @@
+# Folio, slim: Postgres + the two Supabase services Folio actually uses.
+#
+#   gateway   Caddy — serves the static website and routes /rest and /auth
+#   tunnel    Cloudflare tunnel "folio" → folio.example.com (profile: tunnel)
+#   db        Postgres 17 (alpine), tuned for a single user
+#   auth      GoTrue — sign-in and tokens
+#   rest      PostgREST — the API over tables and ledger functions (RLS enforced)
+#   migrate   one-shot: applies supabase/migrations once each, then exits
+#   backup    nightly pg_dump into ./backups (14 kept)
+#
+# No realtime server (apps refresh on focus, reconnect and every ~20 s while
+# visible) and no storage server (small files live in Postgres).
+# Secrets live in .env beside this file on the server, never in the repo.
+name: folio
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "5m", max-file: "2" }
+
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${SITE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+    image: folio-gateway:latest
+    restart: unless-stopped
+    depends_on: [rest, auth]
+    ports:
+      # Bound to loopback only, for local checks on the server. The public
+      # path is the tunnel; nothing is exposed to the internet directly.
+      - "127.0.0.1:${GATEWAY_PORT:-18080}:80"
+    mem_limit: 64m
+    logging: *logging
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    user: "${HOST_UID:-1000}:${HOST_UID:-1000}"
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
+    volumes:
+      - ./tunnel:/etc/cloudflared:ro
+    depends_on: [gateway]
+    mem_limit: 96m
+    logging: *logging
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run server-init.sh}
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    command:
+      - postgres
+      - -c
+      - shared_buffers=48MB
+      - -c
+      - effective_cache_size=192MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - max_connections=30
+      - -c
+      - jit=off
+      - -c
+      - wal_level=minimal
+      - -c
+      - max_wal_senders=0
+      - -c
+      - max_wal_size=256MB
+      - -c
+      - log_min_duration_statement=750
+    volumes:
+      - ./db/init.sh:/docker-entrypoint-initdb.d/10-folio-roles.sh:ro
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    shm_size: 64m
+    mem_limit: 320m
+    logging: *logging
+
+  auth:
+    image: public.ecr.aws/supabase/gotrue:v2.198.0
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: ${SITE_URL}/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres?search_path=auth
+      GOTRUE_DB_MAX_POOL_SIZE: "4"
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${SITE_URL}/auth/callback,folio://auth
+      # No public sign-up: the owner is created with `deploy/folio.sh passphrase`.
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-true}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_ISSUER: ${SITE_URL}/auth/v1
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: "true"
+      GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: "10"
+      GOTRUE_PASSWORD_MIN_LENGTH: "8"
+      # Every passphrase check goes through Folio's lockout hook (migration 0006).
+      GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_ENABLED: "true"
+      GOTRUE_HOOK_PASSWORD_VERIFICATION_ATTEMPT_URI: pg-functions://postgres/private/hook_password_verification_attempt
+      # Per-IP limits use the visitor's address as Cloudflare reports it.
+      GOTRUE_RATE_LIMIT_HEADER: CF-Connecting-IP
+    mem_limit: 64m
+    logging: *logging
+
+  rest:
+    image: public.ecr.aws/supabase/postgrest:v16.5
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_POOL: "4"
+      PGRST_DB_MAX_ROWS: "5000"
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    mem_limit: 96m
+    logging: *logging
+
+  migrate:
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+      auth: { condition: service_started }
+    entrypoint: ["bash", "/folio/migrate.sh"]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      FOLIO_SINGLE_OWNER: ${FOLIO_SINGLE_OWNER:-on}
+    volumes:
+      - ./migrate.sh:/folio/migrate.sh:ro
+      - ../supabase/migrations:/folio/migrations:ro
+    logging: *logging
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    entrypoint: ["bash", "/folio/backup.sh"]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KEEP: "14"
+    volumes:
+      - ./backup.sh:/folio/backup.sh:ro
+      - ./backups:/backups
+    mem_limit: 64m
+    logging: *logging
+
+volumes:
+  db_data:

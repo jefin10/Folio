@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Folio</string>
+    <string name="complication_today">Folio · Today\'s spend</string>
+    <string name="complication_spendable">Folio · Spendable</string>
+</resources>

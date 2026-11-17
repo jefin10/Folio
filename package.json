@@ -1,0 +1,33 @@
+{
+  "name": "folio",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Folio \u2014 personal financial operating system (web, Android, Wear OS)",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "dev:web": "pnpm --filter @folio/web dev",
+    "dev:mobile": "pnpm --filter @folio/mobile start",
+    "build:web": "pnpm --filter @folio/web build",
+    "db:test": "bash supabase/tests/run.sh"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "nativewind": {
+        "dependencies": {
+          "tailwindcss": "3.4.19"
+        }
+      },
+      "react-native-css-interop": {
+        "dependencies": {
+          "tailwindcss": "3.4.19"
+        }
+      }
+    }
+  }
+}
