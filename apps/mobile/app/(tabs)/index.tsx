@@ -267,9 +267,7 @@ export default function Analytics() {
           )}
         </>
       )}
-      <View style={{ paddingHorizontal: 20, marginTop: 30 }}>
-        <PopButton tone="dark" label="Ledger" icon="receipt" onPress={() => router.push('/ledger')} />
-      </View>
+      <View style={{ height: 30 }} />
     </Screen>
   );
 }
