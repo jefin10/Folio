@@ -18,6 +18,8 @@ export const ACCOUNT_TYPE_META: Record<AccountType, AccountTypeMeta> = {
   salary: { type: 'salary', label: 'Salary account', short: 'Salary', class: 'asset', group: 'bank', liquid: true, icon: 'bank', description: 'Where your pay lands' },
   fixed_deposit: { type: 'fixed_deposit', label: 'Fixed deposit', short: 'FD', class: 'asset', group: 'deposit', liquid: false, icon: 'lock', description: 'Locked-in deposit' },
   recurring_deposit: { type: 'recurring_deposit', label: 'Recurring deposit', short: 'RD', class: 'asset', group: 'deposit', liquid: false, icon: 'repeat', description: 'Monthly deposit plan' },
+  stocks: { type: 'stocks', label: 'Stocks', short: 'Stocks', class: 'asset', group: 'other', liquid: false, icon: 'chart', description: 'Shares, ETFs and equities' },
+  mutual_funds: { type: 'mutual_funds', label: 'Mutual funds', short: 'Funds', class: 'asset', group: 'other', liquid: false, icon: 'pie', description: 'SIP or lump-sum funds' },
   cash: { type: 'cash', label: 'Cash', short: 'Cash', class: 'asset', group: 'cash', liquid: true, icon: 'cash', description: 'Money in your pocket' },
   wallet: { type: 'wallet', label: 'Digital wallet', short: 'Wallet', class: 'asset', group: 'wallet', liquid: true, icon: 'wallet', description: 'Prepaid / UPI wallet' },
   credit_card: { type: 'credit_card', label: 'Credit card', short: 'Credit', class: 'liability', group: 'credit', liquid: false, icon: 'card', description: 'Revolving credit line' },

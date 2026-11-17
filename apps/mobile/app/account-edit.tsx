@@ -11,7 +11,7 @@ import { AmountInput, Chip, CircleButton, Eyebrow, Field, Ghost, Icon, Input, In
 import { success, warn } from '../src/lib/haptics';
 import { C, F } from '../src/lib/theme';
 
-const TYPES: AccountType[] = ['savings', 'salary', 'current', 'credit_card', 'debit_card', 'cash', 'wallet', 'fixed_deposit', 'recurring_deposit', 'vehicle_loan', 'personal_loan', 'education_loan', 'home_loan', 'bnpl', 'other_asset', 'other_liability'];
+const TYPES: AccountType[] = ['savings', 'salary', 'current', 'credit_card', 'debit_card', 'cash', 'wallet', 'fixed_deposit', 'recurring_deposit', 'stocks', 'mutual_funds', 'vehicle_loan', 'personal_loan', 'education_loan', 'home_loan', 'bnpl', 'other_asset', 'other_liability'];
 const NETWORKS: CardNetwork[] = ['visa', 'mastercard', 'rupay', 'amex', 'diners'];
 const plain = (p: bigint | null | undefined) => (p == null ? '' : formatMoney(p, { symbol: '', decimals: 'auto' }).replace(/,/g, ''));
 const day = (s: string) => (Number(s) >= 1 && Number(s) <= 31 ? Number(s) : null);
@@ -161,6 +161,7 @@ export default function AccountEdit() {
         artworkPath = await repo.uploadFile(sb, 'artwork', `${name || 'card'}.jpg`, bytes, 'image/jpeg');
       }
       const open = tryParseAmount(opening);
+      const principalAmt = tryParseAmount(principal);
       const id = await save.mutateAsync({
         id: existing?.id,
         name: name.trim(),
@@ -187,8 +188,8 @@ export default function AccountEdit() {
             }
           : null,
         ...(artworkPath ? { artworkPath } : {}),
-        loan: isLoan ? { loanKind: type === 'vehicle_loan' ? 'two_wheeler' : type === 'education_loan' ? 'education' : type === 'home_loan' ? 'home' : 'personal', lender: institution || null, principalAmount: tryParseAmount(principal), interestRateBps: bps(rate), emiAmount: tryParseAmount(emi) ?? suggested, tenureMonths: tenureFromDates ?? (Number(tenure) || null), emiDay: first ? Number(first.slice(8)) : day(emiDay), startDate: first ?? existing?.loan?.startDate ?? today(), emiAccountId: emiFrom } : null,
-        opening: open !== null && type !== 'debit_card' ? { balance: open, on: existing?.openedOn ?? today() } : existing ? null : { balance: 0n, on: today() },
+        loan: isLoan ? { loanKind: type === 'vehicle_loan' ? 'two_wheeler' : type === 'education_loan' ? 'education' : type === 'home_loan' ? 'home' : 'personal', lender: institution || null, principalAmount: principalAmt, interestRateBps: bps(rate), emiAmount: tryParseAmount(emi) ?? suggested, tenureMonths: tenureFromDates ?? (Number(tenure) || null), emiDay: first ? Number(first.slice(8)) : day(emiDay), startDate: first ?? existing?.loan?.startDate ?? today(), emiAccountId: emiFrom } : null,
+        opening: open !== null && type !== 'debit_card' ? { balance: open, on: existing?.openedOn ?? today() } : existing ? null : { balance: isLoan && principalAmt ? principalAmt : 0n, on: today() },
       });
       if (institutionId) await repo.linkInstitution(sb, id, institutionId);
       // A loan's EMI becomes a monthly obligation: due dates, end date, reminders, "mark paid".
@@ -302,7 +303,7 @@ export default function AccountEdit() {
           </Field>
         )}
         {type !== 'debit_card' && (
-          <Field label={existing ? 'Correct opening balance (blank = keep)' : isCredit ? 'Outstanding today' : isLoan ? 'Principal outstanding' : 'Balance today'}>
+          <Field label={existing ? 'Correct opening balance (blank = keep)' : isCredit ? 'Outstanding today' : isLoan ? 'Principal outstanding (blank = loan amount)' : 'Balance today'} hint={isLoan ? 'What you still owe today. Each EMI you mark paid reduces it.' : undefined}>
             <AmountInput value={opening} onChange={setOpening} />
           </Field>
         )}

@@ -36,7 +36,7 @@ const TYPE_GROUPS: { label: string; types: AccountType[] }[] = [
   { label: 'Bank', types: ['savings', 'salary', 'current'] },
   { label: 'Cards & credit', types: ['credit_card', 'secured_credit_card', 'debit_card', 'bnpl'] },
   { label: 'Cash & wallets', types: ['cash', 'wallet'] },
-  { label: 'Deposits & assets', types: ['fixed_deposit', 'recurring_deposit', 'other_asset'] },
+  { label: 'Deposits & assets', types: ['fixed_deposit', 'recurring_deposit', 'stocks', 'mutual_funds', 'other_asset'] },
   { label: 'Loans & liabilities', types: ['vehicle_loan', 'personal_loan', 'education_loan', 'home_loan', 'other_loan', 'other_liability'] },
   { label: 'Anything else', types: ['custom'] },
 ];

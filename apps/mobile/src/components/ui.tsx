@@ -202,13 +202,14 @@ export function Skeleton({ height, width = '100%', radius = 14, style }: { heigh
   return <Animated.View style={[{ height, width, borderRadius: radius, backgroundColor: C.ink3 }, s, style]} />;
 }
 
-export function Empty({ icon = 'sparkle', title, action }: { icon?: string; title: string; body?: string; action?: ReactNode }) {
+export function Empty({ icon = 'sparkle', title, body, action }: { icon?: string; title: string; body?: string; action?: ReactNode }) {
   return (
     <View style={{ alignItems: 'center', paddingVertical: 36, paddingHorizontal: 24 }}>
       <View style={{ width: 60, height: 60, borderRadius: 18, borderWidth: 1, borderColor: C.line, backgroundColor: C.ink2, alignItems: 'center', justifyContent: 'center' }}>
         <Icon name={icon} size={26} color={C.mint} />
       </View>
       <Text style={{ color: C.chalk, fontFamily: F.displayBold, fontSize: 18, marginTop: 16, textAlign: 'center' }}>{title}</Text>
+      {body ? <Text style={{ color: C.mute, fontFamily: F.sans, fontSize: 13, marginTop: 6, textAlign: 'center' }}>{body}</Text> : null}
       {action && <View style={{ marginTop: 18 }}>{action}</View>}
     </View>
   );

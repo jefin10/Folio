@@ -67,7 +67,7 @@ export default function Bills() {
                   <Text style={{ color: i.state === 'overdue' ? C.coral : C.mute, fontFamily: F.sans, fontSize: 12 }}>{relativeDay(i.dueOn, t)}{ruleById.get(i.ruleId)?.bankAutopay ? ' · bank autopay' : ''}</Text>
                 </View>
                 {i.amount ? <Money value={i.amount} decimals={0} style={{ fontSize: 14 }} /> : <Badge label="Varies" />}
-                {i.state === 'paid' ? <Badge label="Paid" tone="mint" /> : i.state === 'skipped' ? <Ghost label="Undo" onPress={() => skip.mutate({ ruleId: i.ruleId, dueOn: i.dueOn, undo: true })} /> : (
+                {i.state === 'paid' ? <Badge label="Paid" tone="mint" /> : i.state === 'skipped' ? <Ghost label="Undo" onPress={() => skip.mutate({ ruleId: i.ruleId, dueOn: i.dueOn, undo: true })} /> : i.dueOn > t ? <Badge label="Scheduled" /> : (
                   <View style={{ flexDirection: 'row' }}>
                     <Ghost label="Paid" color={C.mint} onPress={() => router.push({ pathname: '/add', params: presetForDue(i, ruleById.get(i.ruleId)) })} />
                     <Ghost label="Skip" onPress={() => skip.mutate({ ruleId: i.ruleId, dueOn: i.dueOn })} />

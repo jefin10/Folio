@@ -37,7 +37,7 @@ export default function LoanDetail() {
   const left = emi ? remainingTenure(out, rate, emi) : null;
   const interestLeft = emi ? totalInterestPayable(out, rate, emi) : null;
   const schedule = emi && next && out > 0n && left ? amortizationSchedule(out, rate, Math.min(left, 12), next, emi) : [];
-  const dueItem = rule ? items.find((i) => i.ruleId === rule.id && i.state !== 'paid' && i.state !== 'skipped') : undefined;
+  const dueItem = rule ? items.find((i) => i.ruleId === rule.id && i.state !== 'paid' && i.state !== 'skipped' && i.dueOn <= t) : undefined;
 
   return (
     <Screen back right={<CircleButton icon="settings" label="Edit loan" onPress={() => router.push({ pathname: '/account-edit', params: { id } })} />} bottomPad={60}>

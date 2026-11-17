@@ -108,14 +108,14 @@ export default function Analytics() {
           <Animated.View entering={FadeInDown.springify().damping(18)} style={{ paddingHorizontal: 20, marginTop: 16 }}>
             <Plate style={{ padding: 20, overflow: 'hidden' }}>
               <View style={{ position: 'absolute', right: -60, top: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(61,220,151,0.07)' }} />
-              <Eyebrow>Net worth</Eyebrow>
-              {position ? <HeroMoney value={position.netWorth} size={40} /> : <Skeleton height={46} width="65%" style={{ marginTop: 8 }} />}
+              <Eyebrow>Savings</Eyebrow>
+              {position ? <HeroMoney value={position.bankBalance + position.deposits} size={40} /> : <Skeleton height={46} width="65%" style={{ marginTop: 8 }} />}
               {position && (
                 <View style={{ flexDirection: 'row', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.line }}>
                   {[
                     ['Spendable', position.liquid, C.chalk],
                     ['Owed to you', position.receivables, C.mint],
-                    ['You owe', position.totalLiabilities + position.payables, C.coral],
+                    ['You owe', position.creditOutstanding, C.coral],
                   ].map(([l, v, c]) => (
                     <View key={l as string} style={{ flex: 1 }}>
                       <Text style={{ color: C.mute, fontFamily: F.semibold, fontSize: 11 }}>{l as string}</Text>

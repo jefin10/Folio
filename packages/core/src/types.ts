@@ -11,6 +11,8 @@ export const ACCOUNT_TYPES = [
   'salary',
   'fixed_deposit',
   'recurring_deposit',
+  'stocks',
+  'mutual_funds',
   'cash',
   'wallet',
   'credit_card',

@@ -12,6 +12,7 @@ const TABS: Record<string, { label: string; icon: string }> = {
   index: { label: 'Home', icon: 'chart' },
   cards: { label: 'Cards', icon: 'card' },
   debit: { label: 'Debit', icon: 'bank' },
+  grow: { label: 'Grow', icon: 'sprout' },
   emis: { label: 'EMIs', icon: 'loan' },
 };
 
@@ -70,6 +71,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="cards" />
       <Tabs.Screen name="debit" />
+      <Tabs.Screen name="grow" />
       <Tabs.Screen name="emis" />
     </Tabs>
   );
