@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Run ON THE SERVER, once, from ~/folio/deploy. Generates every secret into
-# .env (mode 600) without printing it, and creates the Cloudflare tunnel.
+# .env (mode 600) without printing it, and publishes the gateway through the
+# server's existing Cloudflare tunnel (the system cloudflared service).
 #   bash server-init.sh <public-hostname>     e.g. folio.example.com
 set -euo pipefail
 cd "$(dirname "$0")"
 HOST=${1:?usage: server-init.sh <public-hostname>}
+PORT=${GATEWAY_PORT:-18080}
+CF=/etc/cloudflared/config.yml
 umask 077
 
 if [ ! -f .env ]; then
@@ -27,9 +30,7 @@ if [ ! -f .env ]; then
     echo "ANON_KEY=$(jwt anon)"
     echo "SERVICE_ROLE_KEY=$(jwt service_role)"
     echo "SECRET_KEY_BASE=$(gen 64)"
-    echo "REALTIME_ENC_KEY=$(gen 16)"
     echo "FOLIO_SINGLE_OWNER=on"
-    echo "COMPOSE_PROFILES=tunnel"
     echo "DISABLE_SIGNUP=true"
   } > .env
   chmod 600 .env
@@ -37,25 +38,25 @@ if [ ! -f .env ]; then
 else
   echo "· .env exists — keeping existing secrets"
 fi
+mkdir -p backups
 
-mkdir -p tunnel backups
-if [ ! -f tunnel/creds.json ]; then
-  if ! cloudflared tunnel info folio >/dev/null 2>&1; then
-    cloudflared tunnel create folio
-  fi
-  id=$(cloudflared tunnel list -o json | python3 -c 'import json,sys; print(next(t["id"] for t in json.load(sys.stdin) if t["name"]=="folio"))')
-  cp "$HOME/.cloudflared/$id.json" tunnel/creds.json
-  chmod 600 tunnel/creds.json
-  cat > tunnel/config.yml <<CFG
-tunnel: $id
-credentials-file: /etc/cloudflared/creds.json
-ingress:
-  - hostname: $HOST
-    service: http://gateway:80
-  - service: http_status:404
-CFG
-  cloudflared tunnel route dns folio "$HOST"
-  echo "✓ tunnel folio → $HOST"
+# Public path: one more ingress rule on the server's existing tunnel.
+# The gateway listens on 127.0.0.1:$PORT only; nothing is exposed directly.
+if sudo grep -q "hostname: $HOST\$" "$CF"; then
+  echo "· $HOST already routed in $CF"
 else
-  echo "· tunnel config exists"
+  tunnel=$(sudo awk '/^tunnel:/{print $2}' "$CF")
+  sudo cp "$CF" "$CF.bak-$(date +%Y%m%d%H%M%S)"
+  sudo python3 - "$CF" "$HOST" "$PORT" <<'PY'
+import sys
+path, host, port = sys.argv[1:]
+lines = open(path).read().splitlines()
+catch = next(i for i, l in enumerate(lines) if l.strip().startswith('- service: http_status'))
+lines[catch:catch] = [f'  - hostname: {host}', f'    service: http://127.0.0.1:{port}']
+open(path, 'w').write('\n'.join(lines) + '\n')
+PY
+  sudo cloudflared tunnel --config "$CF" ingress validate
+  sudo systemctl restart cloudflared
+  cloudflared tunnel route dns "$tunnel" "$HOST"
+  echo "✓ $HOST → tunnel $tunnel → 127.0.0.1:$PORT"
 fi

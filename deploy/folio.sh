@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Deploy helper, run from the dev PC. Builds happen on the server.
-#   deploy/folio.sh init      first-time: sync, secrets, tunnel
-#   deploy/folio.sh up        sync code, build the site on the server, start/refresh everything
+# Deploy helper, run from the dev PC. Folio lives on its own VM
+# (its own compose project in ~/folio), published as folio.example.com.
+#   deploy/folio.sh init      first-time: sync, secrets, route the hostname on the tunnel
+#   deploy/folio.sh up        build the site here (memory-capped), sync, start/refresh everything
+#   deploy/folio.sh web       only build the static site (apps/web/out)
 #   deploy/folio.sh check     disposable copy of the stack on 127.0.0.1:18090 (no tunnel) for tests
 #   deploy/folio.sh check-down  remove that copy and its volume
 #   deploy/folio.sh status    containers + health
@@ -17,6 +19,21 @@ HOST=${FOLIO_HOST:-folio.example.com}
 REMOTE=folio
 SSH=(ssh -i "$KEY" -o ConnectTimeout=20 "$SERVER")
 
+# Static export of the web app, on this PC inside a memory cap (the server
+# has 2 GB shared with other apps). The API is same-origin, so the build is
+# not tied to a hostname; only the public anon key is baked in.
+web() {
+  local anon
+  anon=$("${SSH[@]}" "grep '^ANON_KEY=' $REMOTE/deploy/.env | cut -d= -f2-")
+  [ -n "$anon" ] || { echo "No ANON_KEY on the server yet (run init first)."; exit 1; }
+  systemctl --user reset-failed folio-web.scope 2>/dev/null || true
+  systemd-run --user --scope --quiet --unit=folio-web -p MemoryMax=3G -p MemorySwapMax=0 \
+    nice -n 10 env NEXT_PUBLIC_SUPABASE_URL=same-origin NEXT_PUBLIC_SUPABASE_ANON_KEY="$anon" \
+    NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=2048 \
+    pnpm --filter @folio/web build
+  [ -f apps/web/out/index.html ] || { echo "Web build produced no apps/web/out"; exit 1; }
+}
+
 sync() {
   rsync -az --delete -e "ssh -i $KEY" \
     --exclude node_modules --exclude .next --exclude .expo --exclude .git --exclude '*.log' \
@@ -30,13 +47,18 @@ case "${1:-}" in
     sync
     "${SSH[@]}" "cd $REMOTE/deploy && bash server-init.sh $HOST"
     ;;
+  web)
+    web
+    ;;
   up)
+    web
     sync
     "${SSH[@]}" "cd $REMOTE/deploy && docker compose build gateway && docker compose up -d --remove-orphans && docker compose up -d --force-recreate --no-deps migrate && docker compose wait migrate; docker compose logs --no-log-prefix migrate | tail -12; docker image prune -f >/dev/null"
     ;;
   check)
+    web
     sync
-    "${SSH[@]}" "cd $REMOTE/deploy && sed -e 's/^FOLIO_SINGLE_OWNER=.*/FOLIO_SINGLE_OWNER=off/' -e '/^COMPOSE_PROFILES=/d' .env > .env.check && echo GATEWAY_PORT=18090 >> .env.check && chmod 600 .env.check && docker compose -p folio-check --env-file .env.check build gateway && docker compose -p folio-check --env-file .env.check up -d && docker compose -p folio-check --env-file .env.check wait migrate; docker compose -p folio-check --env-file .env.check logs --no-log-prefix migrate | tail -12"
+    "${SSH[@]}" "cd $REMOTE/deploy && sed -e 's/^FOLIO_SINGLE_OWNER=.*/FOLIO_SINGLE_OWNER=off/' .env > .env.check && echo GATEWAY_PORT=18090 >> .env.check && chmod 600 .env.check && docker compose -p folio-check --env-file .env.check build gateway && docker compose -p folio-check --env-file .env.check up -d && docker compose -p folio-check --env-file .env.check wait migrate; docker compose -p folio-check --env-file .env.check logs --no-log-prefix migrate | tail -12"
     ;;
   check-down)
     "${SSH[@]}" "cd $REMOTE/deploy && docker compose -p folio-check --env-file .env.check down -v --remove-orphans && rm -f .env.check"
@@ -59,7 +81,7 @@ case "${1:-}" in
     "${SSH[@]}" "grep '^ANON_KEY=' $REMOTE/deploy/.env | cut -d= -f2-"
     ;;
   *)
-    sed -n '2,9p' "$0"
+    sed -n '2,13p' "$0"
     exit 1
     ;;
 esac

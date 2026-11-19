@@ -1,7 +1,8 @@
 # Folio, slim: Postgres + the two Supabase services Folio actually uses.
 #
-#   gateway   Caddy — serves the static website and routes /rest and /auth
-#   tunnel    Cloudflare tunnel "folio" → folio.example.com (profile: tunnel)
+#   gateway   Caddy — serves the static website and routes /rest and /auth.
+#             Published as folio.example.com by the server's own cloudflared
+#             service (see server-init.sh); bound to 127.0.0.1 only.
 #   db        Postgres 17 (alpine), tuned for a single user
 #   auth      GoTrue — sign-in and tokens
 #   rest      PostgREST — the API over tables and ledger functions (RLS enforced)
@@ -20,11 +21,10 @@ x-logging: &logging
 services:
   gateway:
     build:
+      # Just Caddy + the static site, which folio.sh builds on the dev PC
+      # (the server has 2 GB of RAM, shared with other apps).
       context: ..
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_SUPABASE_URL: ${SITE_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
     image: folio-gateway:latest
     restart: unless-stopped
     depends_on: [rest, auth]
@@ -33,18 +33,6 @@ services:
       # path is the tunnel; nothing is exposed to the internet directly.
       - "127.0.0.1:${GATEWAY_PORT:-18080}:80"
     mem_limit: 64m
-    logging: *logging
-
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    profiles: ["tunnel"]
-    restart: unless-stopped
-    user: "${HOST_UID:-1000}:${HOST_UID:-1000}"
-    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
-    volumes:
-      - ./tunnel:/etc/cloudflared:ro
-    depends_on: [gateway]
-    mem_limit: 96m
     logging: *logging
 
   db:
