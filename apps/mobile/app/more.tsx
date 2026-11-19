@@ -10,7 +10,7 @@ const LINKS = [
   { href: '/ledger', label: 'Ledger', icon: 'receipt', sub: 'Every entry, searchable' },
   { href: '/grow', label: 'Grow', icon: 'sprout', sub: 'FDs, RDs, stocks, mutual funds' },
   { href: '/accounts', label: 'Accounts', icon: 'bank', sub: 'Banks, cash, wallets, deposits' },
-  { href: '/people', label: 'Owed to you', icon: 'users', sub: 'Reimbursements & splits' },
+  { href: '/people', label: 'People', icon: 'users', sub: 'Who owes you, who you owe' },
   { href: '/loans', label: 'Loans & EMIs', icon: 'loan', sub: 'Principal, interest, schedule' },
   { href: '/bills', label: 'Bills & autopay', icon: 'repeat', sub: 'Subscriptions, rent, insurance' },
   { href: '/settings', label: 'Settings', icon: 'settings', sub: 'Lock, categories, watch, widgets' },
