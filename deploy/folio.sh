@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Deploy helper, run from the dev PC. Folio lives on its own VM
-# (its own compose project in ~/folio), published as folio.example.com.
-#   deploy/folio.sh init      first-time: sync, secrets, route the hostname on the tunnel
+# Deploy helper, run from your dev machine. Folio runs on the server as its
+# own compose project in ~/folio. Configure the target once in
+# deploy/deploy.env (git-ignored; see deploy/deploy.env.example):
+#   FOLIO_SERVER=user@host   FOLIO_HOST=folio.example.com   [FOLIO_SSH_KEY=~/.ssh/key.pem]
+#
+#   deploy/folio.sh init      first-time: sync, secrets, route the hostname (if cloudflared runs there)
 #   deploy/folio.sh up        build the site here (memory-capped), sync, start/refresh everything
 #   deploy/folio.sh web       only build the static site (apps/web/out)
 #   deploy/folio.sh check     disposable copy of the stack on 127.0.0.1:18090 (no tunnel) for tests
@@ -13,14 +16,17 @@
 #   deploy/folio.sh passphrase  set the device passphrase (creates the owner the first time)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-SERVER=${FOLIO_SERVER:-ec2-user@203.0.113.10}
-KEY=${FOLIO_SSH_KEY:-$HOME/.ssh/folio.pem}
-HOST=${FOLIO_HOST:-folio.example.com}
+[ -f deploy/deploy.env ] && . deploy/deploy.env
+SERVER=${FOLIO_SERVER:?set FOLIO_SERVER (user@host) in deploy/deploy.env or the environment}
+HOST=${FOLIO_HOST:?set FOLIO_HOST (public hostname, e.g. folio.example.com)}
+KEY=${FOLIO_SSH_KEY:-}
 REMOTE=folio
-SSH=(ssh -i "$KEY" -o ConnectTimeout=20 "$SERVER")
+SSH_OPTS=(-o ConnectTimeout=20)
+[ -n "$KEY" ] && SSH_OPTS+=(-i "$KEY")
+SSH=(ssh "${SSH_OPTS[@]}" "$SERVER")
 
-# Static export of the web app, on this PC inside a memory cap (the server
-# has 2 GB shared with other apps). The API is same-origin, so the build is
+# Static export of the web app, built on this machine inside a memory cap,
+# so a small server never has to run Node. The API is same-origin, so the build is
 # not tied to a hostname; only the public anon key is baked in.
 web() {
   local anon
@@ -35,10 +41,10 @@ web() {
 }
 
 sync() {
-  rsync -az --delete -e "ssh -i $KEY" \
+  rsync -az --delete -e "ssh ${SSH_OPTS[*]}" \
     --exclude node_modules --exclude .next --exclude .expo --exclude .git --exclude '*.log' \
     --exclude apps/mobile/android --exclude apps/mobile/ios --exclude apps/wear/build --exclude apps/wear/app/build --exclude apps/wear/.gradle \
-    --exclude deploy/.env --exclude deploy/tunnel --exclude deploy/backups --exclude 'apps/web/.env*' \
+    --exclude deploy/.env --exclude deploy/deploy.env --exclude deploy/tunnel --exclude deploy/backups --exclude 'apps/web/.env*' \
     ./ "$SERVER:$REMOTE/"
 }
 
@@ -81,7 +87,7 @@ case "${1:-}" in
     "${SSH[@]}" "grep '^ANON_KEY=' $REMOTE/deploy/.env | cut -d= -f2-"
     ;;
   *)
-    sed -n '2,13p' "$0"
+    sed -n '2,17p' "$0"
     exit 1
     ;;
 esac

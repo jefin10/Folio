@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run ON THE SERVER, once, from ~/folio/deploy. Generates every secret into
-# .env (mode 600) without printing it, and publishes the gateway through the
-# server's existing Cloudflare tunnel (the system cloudflared service).
+# .env (mode 600) without printing it. If the machine runs cloudflared as a
+# system service, it also adds an ingress rule and DNS record for the
+# hostname; otherwise point your own HTTPS reverse proxy at the gateway.
 #   bash server-init.sh <public-hostname>     e.g. folio.example.com
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -40,9 +41,12 @@ else
 fi
 mkdir -p backups
 
-# Public path: one more ingress rule on the server's existing tunnel.
-# The gateway listens on 127.0.0.1:$PORT only; nothing is exposed directly.
-if sudo grep -q "hostname: $HOST\$" "$CF"; then
+# Public path. The gateway listens on 127.0.0.1:$PORT only; nothing is
+# exposed directly.
+if ! sudo test -f "$CF"; then
+  echo "· no $CF on this machine: publish https://$HOST yourself by proxying it to http://127.0.0.1:$PORT"
+  echo "  (Cloudflare Tunnel, Caddy, nginx… anything that terminates HTTPS)."
+elif sudo grep -q "hostname: $HOST\$" "$CF"; then
   echo "· $HOST already routed in $CF"
 else
   tunnel=$(sudo awk '/^tunnel:/{print $2}' "$CF")

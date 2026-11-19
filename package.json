@@ -1,6 +1,7 @@
 {
   "name": "folio",
   "private": true,
+  "license": "MIT",
   "version": "1.0.0",
   "description": "Folio \u2014 personal financial operating system (web, Android, Wear OS)",
   "packageManager": "pnpm@12.18.0",

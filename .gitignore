@@ -25,3 +25,7 @@ supabase/.branches/
 .DS_Store
 next-env.d.ts
 *.tsbuildinfo
+
+# local deploy target (server, hostname, key path)
+deploy/deploy.env
+deploy/.env
