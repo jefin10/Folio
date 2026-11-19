@@ -289,6 +289,35 @@ select tests.as_user('22222222-2222-2222-2222-222222222222');
 select tests.ok((select count(*) from public.files) = 0, 'other user cannot see the file');
 commit;
 
+-- -----------------------------------------------------------------------------
+-- Grow details (FD / RD / stocks / mutual funds): principal, rate, tenure,
+-- invested amount, SIP plan — private per user, saved through save_account.
+-- -----------------------------------------------------------------------------
+begin;
+select tests.as_user('11111111-1111-1111-1111-111111111111');
+select public.save_account('{"name":"HDFC FD","type":"fixed_deposit"}', null, null, '{"balance":10000000,"on":"2026-11-01"}',
+  '{"principal_amount":10000000,"interest_rate_bps":700,"start_date":"2026-11-01","tenure_months":12,"compounding_per_year":4}');
+select tests.ok((select g.interest_rate_bps from public.grow_details g join public.accounts a on a.id = g.account_id where a.name = 'HDFC FD') = 700, 'FD stores its deposit, rate and tenure');
+select tests.ok((select g.tenure_months from public.grow_details g join public.accounts a on a.id = g.account_id where a.name = 'HDFC FD') = 12, 'FD tenure saved');
+select public.save_account('{"name":"Index Fund","type":"mutual_funds"}', null, null, '{"balance":124700,"on":"2026-11-01"}',
+  '{"invested_amount":10000000,"sip_amount":200000,"sip_frequency":"monthly"}');
+select tests.ok((select g.invested_amount from public.grow_details g join public.accounts a on a.id = g.account_id where a.name = 'Index Fund') = 10000000, 'fund stores invested amount');
+select tests.ok((select g.sip_frequency from public.grow_details g join public.accounts a on a.id = g.account_id where a.name = 'Index Fund') = 'monthly', 'fund stores its SIP plan');
+-- An edit without grow details (e.g. an older client) must not clobber them.
+select public.save_account((select jsonb_build_object('id', a.id, 'name', a.name, 'type', a.type::text, 'include_in_net_worth', true) from public.accounts a where a.name = 'HDFC FD'), null, null, null);
+select tests.ok((select g.principal_amount from public.grow_details g join public.accounts a on a.id = g.account_id where a.name = 'HDFC FD') = 10000000, 'saving without grow details keeps them');
+-- Grow details on a non-grow account are ignored, not stored.
+select public.save_account('{"name":"Fake grow","type":"savings"}', null, null, null, '{"invested_amount":5}');
+select tests.ok((select count(*) from public.grow_details g join public.accounts a on a.id = g.account_id where a.name = 'Fake grow') = 0, 'grow details are ignored for non-grow accounts');
+commit;
+create temp table grow_ids as select a.id, a.name from public.accounts a where a.name in ('HDFC FD', 'Index Fund');
+grant select on grow_ids to authenticated;
+begin;
+select tests.as_user('22222222-2222-2222-2222-222222222222');
+select tests.ok((select count(*) from public.grow_details) = 0, 'grow details are private to the owner');
+select tests.expect_error($q$ insert into public.grow_details (account_id, owner_id) values ((select id from grow_ids where name = 'HDFC FD'), '22222222-2222-2222-2222-222222222222'::uuid) $q$, '%Unknown account%', 'cannot touch another user''s grow details');
+commit;
+
 -- Single-owner lock (used by the self-hosted deploy).
 insert into private.instance_settings (key, value) values ('single_owner', 'on');
 do $$

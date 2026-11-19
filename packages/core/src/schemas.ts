@@ -41,6 +41,17 @@ export const loanDetailsRow = z.object({
   emi_account_id: uuid.nullable().optional(),
 });
 
+export const growDetailsRow = z.object({
+  principal_amount: paiseNullable.optional(),
+  interest_rate_bps: nnum,
+  start_date: date.nullable().optional(),
+  tenure_months: nnum,
+  compounding_per_year: z.number().default(4),
+  invested_amount: paiseNullable.optional(),
+  sip_amount: paiseNullable.optional(),
+  sip_frequency: z.enum(['daily', 'weekly', 'monthly']).nullable().optional(),
+});
+
 const themeSchema = z
   .object({ preset: z.string(), colors: z.array(z.string()).max(4), ink: z.enum(['light', 'dark']), pattern: z.string().nullable().optional() })
   .nullable()
@@ -72,6 +83,7 @@ export const accountRow = z.object({
   created_at: z.string().optional(),
   card_details: z.union([cardDetailsRow, z.array(cardDetailsRow)]).nullable().optional(),
   loan_details: z.union([loanDetailsRow, z.array(loanDetailsRow)]).nullable().optional(),
+  grow_details: z.union([growDetailsRow, z.array(growDetailsRow)]).nullable().optional(),
 });
 
 const one = <T>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
@@ -80,6 +92,7 @@ export function mapAccount(raw: unknown): Account {
   const r = accountRow.parse(raw);
   const card = one(r.card_details);
   const loan = one(r.loan_details);
+  const grow = one(r.grow_details);
   return {
     id: r.id,
     name: r.name,
@@ -129,6 +142,18 @@ export function mapAccount(raw: unknown): Account {
           emiDay: loan.emi_day,
           startDate: loan.start_date ?? null,
           emiAccountId: loan.emi_account_id ?? null,
+        }
+      : null,
+    grow: grow
+      ? {
+          principalAmount: grow.principal_amount ?? null,
+          interestRateBps: grow.interest_rate_bps,
+          startDate: grow.start_date ?? null,
+          tenureMonths: grow.tenure_months,
+          compoundingPerYear: grow.compounding_per_year,
+          investedAmount: grow.invested_amount ?? null,
+          sipAmount: grow.sip_amount ?? null,
+          sipFrequency: grow.sip_frequency ?? null,
         }
       : null,
   };

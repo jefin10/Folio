@@ -39,7 +39,7 @@ import { FolioApiError, toApiError } from './errors';
 
 export type Sb = SupabaseClient;
 
-const ACCOUNT_SELECT = '*, card_details!card_details_account_id_fkey(*), loan_details!loan_details_account_id_fkey(*)';
+const ACCOUNT_SELECT = '*, card_details!card_details_account_id_fkey(*), loan_details!loan_details_account_id_fkey(*), grow_details!grow_details_account_id_fkey(*)';
 const ENTRY_SELECT = '*, postings(*)';
 const PAGE = 1000;
 
@@ -117,6 +117,8 @@ export interface AccountInput {
   openedOn?: ISODate | null;
   card?: Partial<NonNullable<Account['card']>> | null;
   loan?: Partial<NonNullable<Account['loan']>> | null;
+  /** FD / RD / stocks / mutual funds: principal, rate, tenure, SIP. */
+  grow?: Partial<NonNullable<Account['grow']>> | null;
   /** Natural opening balance (money held / amount owed). Omit to leave unchanged. */
   opening?: { balance: Paise; on: ISODate } | null;
 }
@@ -173,7 +175,19 @@ export async function saveAccount(sb: Sb, input: AccountInput): Promise<string> 
       }
     : null;
   const opening = input.opening ? { balance: input.opening.balance.toString(), on: input.opening.on } : null;
-  return check(await sb.rpc('save_account', { p_account: account, p_card: card, p_loan: loan, p_opening: opening })) as string;
+  const grow = input.grow
+    ? {
+        principal_amount: big(input.grow.principalAmount),
+        interest_rate_bps: input.grow.interestRateBps ?? null,
+        start_date: input.grow.startDate ?? null,
+        tenure_months: input.grow.tenureMonths ?? null,
+        compounding_per_year: input.grow.compoundingPerYear ?? 4,
+        invested_amount: big(input.grow.investedAmount),
+        sip_amount: big(input.grow.sipAmount),
+        sip_frequency: input.grow.sipFrequency ?? null,
+      }
+    : null;
+  return check(await sb.rpc('save_account', { p_account: account, p_card: card, p_loan: loan, p_opening: opening, p_grow: grow })) as string;
 }
 
 export async function setAccountStatus(sb: Sb, id: string, status: Account['status']): Promise<void> {

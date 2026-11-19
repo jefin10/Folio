@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addMonths, ACCOUNT_TYPE_META, CARD_PRODUCTS, CARD_THEME_PRESETS, computeEmi, containsSensitiveCardData, findInstitution, formatMoney, groupOf, searchInstitutions, themeFromInstitution, today, tryParseAmount, type AccountType, type CardNetwork, type CardProduct, type CardTheme, type CatalogInstitution } from '@folio/core';
+import { addMonths, ACCOUNT_TYPE_META, CARD_PRODUCTS, CARD_THEME_PRESETS, computeEmi, containsSensitiveCardData, fdMaturityValue, findInstitution, formatDate, formatMoney, groupOf, rdMaturityValue, searchInstitutions, themeFromInstitution, today, tryParseAmount, type AccountType, type CardNetwork, type CardProduct, type CardTheme, type CatalogInstitution, type SipFrequency } from '@folio/core';
 import { repo, useAccountStatus, useAccounts, useFolio, useRules, useSaveAccount, useSaveInstitution, useSaveRule } from '@folio/api';
 import { FinanceCard } from '../src/components/cards';
 import { DateField } from '../src/components/date-field';
-import { ActionSheet, AmountInput, Chip, CircleButton, Eyebrow, Field, Ghost, Icon, Input, InstitutionBadge, PopButton, Segmented } from '../src/components/ui';
+import { ActionSheet, AmountInput, Chip, CircleButton, Eyebrow, Field, Ghost, Icon, Input, InstitutionBadge, Plate, PopButton, Segmented } from '../src/components/ui';
 import { success, warn } from '../src/lib/haptics';
 import { C, F } from '../src/lib/theme';
 
@@ -51,6 +51,14 @@ export default function AccountEdit() {
   const [firstEmi, setFirstEmi] = useState('');
   const [lastEmi, setLastEmi] = useState('');
   const [emiFrom, setEmiFrom] = useState<string | null>(null);
+  // Grow: deposits (FD / RD) and market (stocks / mutual funds).
+  const [startOn, setStartOn] = useState('');
+  const [tenureM, setTenureM] = useState('');
+  const [installment, setInstallment] = useState('');
+  const [invested, setInvested] = useState('');
+  const [sipFreq, setSipFreq] = useState<'none' | SipFrequency>('none');
+  const [sipAmt, setSipAmt] = useState('');
+  const [sipFrom, setSipFrom] = useState<string | null>(null);
   const rules = useRules().data ?? [];
   const saveRule = useSaveRule();
   const [principal, setPrincipal] = useState('');
@@ -109,11 +117,20 @@ export default function AccountEdit() {
     setFirstEmi(sd ?? '');
     setLastEmi(sd && existing.loan?.tenureMonths ? addMonths(sd, existing.loan.tenureMonths - 1, existing.loan.emiDay ?? undefined) : '');
     setEmiFrom(existing.loan?.emiAccountId ?? null);
-  }, [existing]);
+    setStartOn(existing.grow?.startDate ?? existing.openedOn ?? '');
+    setTenureM(existing.grow?.tenureMonths?.toString() ?? '');
+    setInstallment(existing.type === 'recurring_deposit' ? plain(existing.grow?.principalAmount) : '');
+    setInvested(plain(existing.grow?.investedAmount));
+    setSipFreq(existing.grow?.sipFrequency ?? 'none');
+    setSipAmt(plain(existing.grow?.sipAmount));
+    setSipFrom(existing.grow?.sipFrequency ? rules.find((r) => r.kind === 'sip' && r.targetAccountId === existing.id)?.sourceAccountId ?? null : null);
+  }, [existing, rules]);
 
   const group = groupOf({ type });
   const isCredit = group === 'credit';
   const isLoan = group === 'loan';
+  const isDeposit = type === 'fixed_deposit' || type === 'recurring_deposit';
+  const isMarket = type === 'stocks' || type === 'mutual_funds';
   const results = useMemo(() => searchInstitutions(institution, 8), [institution]);
   const banks = accounts.filter((a) => (groupOf(a) === 'bank' || a.type === 'wallet') && a.status === 'active');
   const first = firstEmi || null;
@@ -125,6 +142,26 @@ export default function AccountEdit() {
     const n = tenureFromDates ?? Number(tenure);
     return p && r !== null && n ? computeEmi(p, r, n) : null;
   }, [principal, rate, tenure, tenureFromDates]);
+
+  // Deposit projection: what the FD / RD will be worth on maturity day.
+  const depositPreview = useMemo(() => {
+    if (!isDeposit) return null;
+    const start = startOn || today();
+    const months = Number(tenureM);
+    if (!(months >= 1)) return null;
+    const r = bps(rate);
+    const rateBps = r === null ? 0 : r;
+    if (type === 'fixed_deposit') {
+      const p = tryParseAmount(opening);
+      if (!p) return null;
+      const value = fdMaturityValue(p, rateBps, months);
+      return { months, start, maturityOn: addMonths(start, months), value, interest: value - p, basis: p, installment: null as null };
+    }
+    const inst = tryParseAmount(installment);
+    if (!inst) return null;
+    const value = rdMaturityValue(inst, rateBps, months);
+    return { months, start, maturityOn: addMonths(start, months), value, interest: value - inst * BigInt(months), basis: inst * BigInt(months), installment: inst };
+  }, [isDeposit, type, startOn, tenureM, rate, opening, installment]);
 
   const preview = {
     ...(existing ?? { id: 'preview', currency: 'INR', color: null, icon: null, status: 'active' as const, sortOrder: 0, linkedAccountId: null, loan: null, openedOn: today(), institutionId: null, artworkPath: null, interestRateBps: null, customTypeLabel: null, notes: null, includeInNetWorth: true, isLiquid: true }),
@@ -191,6 +228,11 @@ export default function AccountEdit() {
           : null,
         ...(artworkPath ? { artworkPath } : {}),
         loan: isLoan ? { loanKind: type === 'vehicle_loan' ? 'two_wheeler' : type === 'education_loan' ? 'education' : type === 'home_loan' ? 'home' : 'personal', lender: institution || null, principalAmount: principalAmt, interestRateBps: bps(rate), emiAmount: tryParseAmount(emi) ?? suggested, tenureMonths: tenureFromDates ?? (Number(tenure) || null), emiDay: first ? Number(first.slice(8)) : day(emiDay), startDate: first ?? existing?.loan?.startDate ?? today(), emiAccountId: emiFrom } : null,
+        grow: isDeposit
+          ? { principalAmount: type === 'fixed_deposit' ? open ?? existing?.grow?.principalAmount ?? null : tryParseAmount(installment), interestRateBps: bps(rate), startDate: startOn || existing?.openedOn || today(), tenureMonths: Number(tenureM) || null, compoundingPerYear: 4, investedAmount: null, sipAmount: null, sipFrequency: null }
+          : isMarket
+            ? { principalAmount: null, interestRateBps: null, startDate: null, tenureMonths: null, compoundingPerYear: 4, investedAmount: tryParseAmount(invested), sipAmount: type === 'mutual_funds' && sipFreq !== 'none' ? tryParseAmount(sipAmt) : null, sipFrequency: type === 'mutual_funds' && sipFreq !== 'none' ? sipFreq : null }
+            : null,
         opening: open !== null && type !== 'debit_card' ? { balance: open, on: existing?.openedOn ?? today() } : existing ? null : { balance: isLoan && principalAmt ? principalAmt : 0n, on: today() },
       });
       if (institutionId) await repo.linkInstitution(sb, id, institutionId);
@@ -224,6 +266,63 @@ export default function AccountEdit() {
           bankAutopay: prev?.bankAutopay ?? true,
           notes: prev?.notes ?? null,
         });
+      }
+      // A fund SIP becomes an obligation too: due dates, reminders, "mark paid".
+      const sipAmount = tryParseAmount(sipAmt);
+      if (type === 'mutual_funds' && sipFreq !== 'none' && sipAmount) {
+        const t = today();
+        const prevSip = rules.find((r) => r.kind === 'sip' && r.targetAccountId === id);
+        if (sipFreq === 'monthly') {
+          const d = prevSip?.dayOfMonth ?? Number(t.slice(8));
+          let firstOn = startOn && startOn > t ? startOn : t;
+          firstOn = `${firstOn.slice(0, 8)}${String(Math.min(d, 31)).padStart(2, '0')}`;
+          if (firstOn < t) firstOn = addMonths(firstOn, 1, d);
+          await saveRule.mutateAsync({
+            id: prevSip?.id,
+            name: `${name.trim()} SIP`,
+            kind: 'sip',
+            amount: sipAmount,
+            isVariable: false,
+            frequency: 'monthly',
+            intervalDays: null,
+            startOn: firstOn,
+            endOn: null,
+            maxOccurrences: null,
+            dayOfMonth: d,
+            sourceAccountId: sipFrom,
+            targetAccountId: id,
+            categoryId: null,
+            personId: null,
+            reminderDaysBefore: prevSip?.reminderDaysBefore ?? 2,
+            reminderTime: prevSip?.reminderTime ?? '09:00',
+            isActive: true,
+            bankAutopay: prevSip?.bankAutopay ?? true,
+            notes: prevSip?.notes ?? null,
+          });
+        } else {
+          await saveRule.mutateAsync({
+            id: prevSip?.id,
+            name: `${name.trim()} SIP`,
+            kind: 'sip',
+            amount: sipAmount,
+            isVariable: false,
+            frequency: sipFreq === 'weekly' ? 'weekly' : 'custom_days',
+            intervalDays: sipFreq === 'weekly' ? null : 1,
+            startOn: (startOn && startOn > t ? startOn : t) || t,
+            endOn: null,
+            maxOccurrences: null,
+            dayOfMonth: null,
+            sourceAccountId: sipFrom,
+            targetAccountId: id,
+            categoryId: null,
+            personId: null,
+            reminderDaysBefore: prevSip?.reminderDaysBefore ?? 2,
+            reminderTime: prevSip?.reminderTime ?? '09:00',
+            isActive: true,
+            bankAutopay: prevSip?.bankAutopay ?? true,
+            notes: prevSip?.notes ?? null,
+          });
+        }
       }
       success();
       router.back();
@@ -309,7 +408,10 @@ export default function AccountEdit() {
           </Field>
         )}
         {type !== 'debit_card' && (
-          <Field label={existing ? 'Correct opening balance (blank = keep)' : isCredit ? 'Outstanding today' : isLoan ? 'Principal outstanding (blank = loan amount)' : 'Balance today'} hint={isLoan ? 'What you still owe today. Each EMI you mark paid reduces it.' : undefined}>
+          <Field
+            label={existing ? 'Correct opening balance (blank = keep)' : type === 'fixed_deposit' ? 'Deposit amount' : type === 'recurring_deposit' ? 'Installments paid so far' : isMarket ? 'Current value' : isCredit ? 'Outstanding today' : isLoan ? 'Principal outstanding (blank = loan amount)' : 'Balance today'}
+            hint={isLoan ? 'What you still owe today. Each EMI you mark paid reduces it.' : type === 'recurring_deposit' ? 'Each installment you record grows it.' : isMarket ? 'What your holdings are worth today.' : undefined}
+          >
             <AmountInput value={opening} onChange={setOpening} />
           </Field>
         )}
@@ -388,6 +490,81 @@ export default function AccountEdit() {
           </>
         )}
 
+        {isDeposit && (
+          <>
+            {type === 'recurring_deposit' && (
+              <Field label="Monthly installment">
+                <AmountInput value={installment} onChange={setInstallment} />
+              </Field>
+            )}
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Field label="Rate % p.a.">
+                  <Input value={rate} onChangeText={setRate} keyboardType="decimal-pad" placeholder="7.5" />
+                </Field>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field label="Started on">
+                  <DateField value={startOn || null} onChange={(d) => setStartOn(d ?? '')} />
+                </Field>
+              </View>
+            </View>
+            <Field label="Tenure" hint={type === 'recurring_deposit' ? `Total ${formatMoney(depositPreview?.basis ?? 0n, { decimals: 0 })} over the tenure.` : undefined}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {[6, 9, 12, 18, 24, 36, 60].map((m) => (
+                  <Chip key={m} label={m >= 12 ? `${m / 12} yr${m >= 24 ? 's' : ''}` : `${m} mo`} active={tenureM === String(m)} onPress={() => setTenureM(String(m))} />
+                ))}
+              </View>
+              <Input value={tenureM} onChangeText={(v) => setTenureM(v.replace(/\D/g, '').slice(0, 3))} keyboardType="number-pad" placeholder="Months" style={{ marginTop: 10 }} />
+            </Field>
+            {depositPreview && (
+              <Plate style={{ padding: 16, gap: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: C.mute, fontFamily: F.semibold, fontSize: 12.5 }}>Matures {formatDate(depositPreview.maturityOn)}</Text>
+                  <Text style={{ color: C.chalk, fontFamily: F.extrabold, fontSize: 12.5 }}>{type === 'fixed_deposit' ? 'FD' : 'RD'} · quarterly compounding</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <View>
+                    <Text style={{ color: C.mute, fontFamily: F.extrabold, fontSize: 10.5, letterSpacing: 1.4 }}>MATURITY VALUE</Text>
+                    <Text style={{ color: C.chalk, fontFamily: F.extrabold, fontSize: 24, marginTop: 3, fontVariant: ['tabular-nums'] }}>{formatMoney(depositPreview.value, { decimals: 0 })}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ color: C.mute, fontFamily: F.extrabold, fontSize: 10.5, letterSpacing: 1.4 }}>INTEREST</Text>
+                    <Text style={{ color: C.mint, fontFamily: F.extrabold, fontSize: 17, marginTop: 3, fontVariant: ['tabular-nums'] }}>+{formatMoney(depositPreview.interest, { decimals: 0 })}</Text>
+                  </View>
+                </View>
+              </Plate>
+            )}
+          </>
+        )}
+
+        {isMarket && (
+          <>
+            <Field label="Invested so far" hint="Money you actually put in. The balance above is what it's worth now.">
+              <AmountInput value={invested} onChange={setInvested} />
+            </Field>
+            {type === 'mutual_funds' && (
+              <Field label="SIP" hint="Money moves from your bank on a schedule. Tracked and reminded, never auto-paid.">
+                <Segmented value={sipFreq} onChange={setSipFreq} options={[{ value: 'none', label: 'No SIP' }, { value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }, { value: 'monthly', label: 'Monthly' }]} />
+                {sipFreq !== 'none' && (
+                  <View style={{ marginTop: 12, gap: 12 }}>
+                    <Field label={`${sipFreq === 'daily' ? 'Daily' : sipFreq === 'weekly' ? 'Weekly' : 'Monthly'} amount`}>
+                      <AmountInput value={sipAmt} onChange={setSipAmt} />
+                    </Field>
+                    <Field label="Paid from">
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {banks.map((b) => (
+                          <Chip key={b.id} label={b.nickname || b.name} active={sipFrom === b.id} onPress={() => setSipFrom(b.id)} />
+                        ))}
+                      </View>
+                    </Field>
+                  </View>
+                )}
+              </Field>
+            )}
+          </>
+        )}
+
         {type !== 'cash' && (
           <Field label="Exact look" hint="Front only, never the back (CVV). Stored privately in your Folio database.">
             <PopButton tone="dark" size="sm" icon="upload" label={cardPhoto ? 'Photo selected' : existing?.artworkPath ? 'Replace my card photo' : 'Use my card photo'} onPress={pickCardPhoto} />
@@ -417,21 +594,23 @@ export default function AccountEdit() {
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingBottom: insets.bottom + 14, backgroundColor: C.ink1, borderTopWidth: 1, borderTopColor: C.line }}>
         <PopButton tone="mint" size="lg" label={existing ? 'Save' : 'Add account'} onPress={submit} disabled={!valid} loading={save.isPending} />
       </View>
-      <ActionSheet
-        open={sheet}
-        onClose={() => setSheet(false)}
-        title={existing!.status === 'active' ? 'Archive this account?' : 'Restore this account?'}
-        sub="Its history is kept either way."
-        options={[
-          {
-            label: existing!.status === 'active' ? 'Archive' : 'Restore',
-            icon: 'archive',
-            danger: existing!.status === 'active',
-            onPress: () => void setStatus.mutateAsync({ id: existing!.id, status: existing!.status === 'active' ? 'archived' : 'active' }).then(() => router.back()),
-          },
-        ]}
-        cancelLabel="Cancel"
-      />
+      {existing && (
+        <ActionSheet
+          open={sheet}
+          onClose={() => setSheet(false)}
+          title={existing.status === 'active' ? 'Archive this account?' : 'Restore this account?'}
+          sub="Its history is kept either way."
+          options={[
+            {
+              label: existing.status === 'active' ? 'Archive' : 'Restore',
+              icon: 'archive',
+              danger: existing.status === 'active',
+              onPress: () => void setStatus.mutateAsync({ id: existing.id, status: existing.status === 'active' ? 'archived' : 'active' }).then(() => router.back()),
+            },
+          ]}
+          cancelLabel="Cancel"
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }

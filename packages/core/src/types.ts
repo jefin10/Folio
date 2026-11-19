@@ -68,6 +68,22 @@ export interface LoanDetails {
   emiAccountId: string | null; // the account EMI is paid from
 }
 
+export type SipFrequency = 'daily' | 'weekly' | 'monthly';
+
+/** Per-type facts for the Grow section (FD / RD / stocks / mutual funds). */
+export interface GrowDetails {
+  /** FD: the one-time deposit. RD: the monthly installment. */
+  principalAmount: Paise | null;
+  interestRateBps: number | null; // annual, e.g. 750 = 7.5% p.a.
+  startDate: ISODate | null;
+  tenureMonths: number | null;
+  compoundingPerYear: number; // 1, 2, 4 or 12; Indian deposits compound quarterly
+  /** Market accounts: money actually put in. Current value is the ledger balance. */
+  investedAmount: Paise | null;
+  sipAmount: Paise | null;
+  sipFrequency: SipFrequency | null;
+}
+
 export interface CardTheme {
   /** Preset artwork key or 'custom' */
   preset: string;
@@ -103,6 +119,7 @@ export interface Account {
   linkedAccountId: string | null; // debit card → bank account
   card: CardDetails | null;
   loan: LoanDetails | null;
+  grow: GrowDetails | null;
   openedOn: ISODate | null;
   createdAt?: string;
 }

@@ -1,32 +1,69 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { sortAccounts, type Account } from '@folio/core';
+import { useMemo, useState } from 'react';
+import { formatDate, formatMoney, growStats, sortAccounts, type Account } from '@folio/core';
 import { usePosition } from '@folio/api';
 import { ActionSheet, Empty, PopButton } from '../src/components/ui';
 import { faceOf, WalletHeader, WalletList } from '../src/components/wallet';
 
 const GROW_TYPES: Account['type'][] = ['fixed_deposit', 'recurring_deposit', 'stocks', 'mutual_funds'];
-const DEPOSIT_TYPES = new Set<Account['type']>(['fixed_deposit', 'recurring_deposit']);
+
+/** One short line under each card: where it stands in one glance. */
+function metaFor(a: Account, value: bigint): string | undefined {
+  const s = growStats(a, value);
+  const bits: string[] = [];
+  if (s.group === 'deposit') {
+    if (a.grow?.interestRateBps != null) bits.push(`${(a.grow.interestRateBps / 100).toFixed(a.grow.interestRateBps % 100 ? 2 : 0)}%`);
+    if (a.type === 'recurring_deposit' && a.grow?.principalAmount) bits.push(`${formatMoney(a.grow.principalAmount, { decimals: 0 })}/mo`);
+    if (s.maturityOn) bits.push(`matures ${formatDate(s.maturityOn)}`);
+    if (s.maturityValue != null) bits.push(`→ ${formatMoney(s.maturityValue, { decimals: 0 })}`);
+  } else {
+    if (a.grow?.sipFrequency) bits.push(`SIP ${formatMoney(a.grow.sipAmount ?? 0n, { decimals: 0 })} ${a.grow.sipFrequency}`);
+    if (a.grow?.investedAmount != null) {
+      const pct = s.gainBps == null ? '' : ` (${s.gain >= 0n ? '+' : ''}${(s.gainBps / 100).toFixed(1)}%)`;
+      bits.push(`${formatMoney(s.invested, { decimals: 0 })} in${s.gain !== 0n ? `, ${s.gain >= 0n ? '+' : '−'}${formatMoney(s.gain < 0n ? -s.gain : s.gain, { decimals: 0 })}${pct}` : ''}`);
+    }
+  }
+  return bits.length ? bits.join(' · ') : undefined;
+}
 
 /** Money that's locked away or in the market: FDs, RDs, stocks and mutual funds. */
 export default function Grow() {
   const { accounts, balances } = usePosition();
   const [sheet, setSheet] = useState(false);
-  const items = sortAccounts(accounts.filter((a) => a.status === 'active' && GROW_TYPES.includes(a.type)));
-  const bal = (a: Account) => balances.get(a.id)?.balance ?? 0n;
-  const deposits = items.filter((a) => DEPOSIT_TYPES.has(a.type)).reduce((s, a) => s + bal(a), 0n);
-  const market = items.filter((a) => !DEPOSIT_TYPES.has(a.type)).reduce((s, a) => s + bal(a), 0n);
+  const items = useMemo(() => sortAccounts(accounts.filter((a) => a.status === 'active' && GROW_TYPES.includes(a.type))), [accounts]);
+  const stats = useMemo(() => {
+    let invested = 0n;
+    let value = 0n;
+    for (const a of items) {
+      const s = growStats(a, balances.get(a.id)?.balance ?? 0n);
+      invested += s.invested;
+      value += s.value;
+    }
+    return { invested, value, gain: value - invested };
+  }, [items, balances]);
   const add = () => setSheet(true);
 
   return (
     <>
       <WalletList
-        header={<WalletHeader title="Grow" onAdd={add} onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} left={{ label: 'Deposits', value: deposits }} right={{ label: 'Market', value: market }} />}
-        items={items.map((a) => ({
-          id: a.id,
-          face: faceOf(a),
-          onDetails: () => router.push(`/account/${a.id}`),
-        }))}
+        header={
+          <WalletHeader
+            title="Grow"
+            onAdd={add}
+            onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+            left={{ label: 'Total invested', value: stats.invested }}
+            right={{ label: 'Now worth', value: stats.value, tone: stats.gain >= 0n ? '#3ddc97' : undefined }}
+          />
+        }
+        items={items.map((a) => {
+          const bal = balances.get(a.id)?.balance ?? 0n;
+          return {
+            id: a.id,
+            face: faceOf(a),
+            meta: metaFor(a, bal),
+            onDetails: () => router.push(`/account/${a.id}`),
+          };
+        })}
         addLabel="Add"
         onAdd={add}
         empty={<Empty icon="sparkle" title="Nothing growing yet" body="Fixed deposits, RDs, stocks and mutual funds live here." action={<PopButton tone="mint" label="Add deposit" icon="plus" onPress={add} />} />}

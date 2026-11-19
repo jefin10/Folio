@@ -31,6 +31,7 @@ export function account(id: string, type: AccountType, extra: Partial<Account> =
     linkedAccountId: null,
     card: null,
     loan: null,
+    grow: null,
     openedOn: '2026-01-01',
     ...extra,
   };

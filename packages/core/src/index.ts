@@ -8,6 +8,7 @@ export * from './position';
 export * from './reimbursements';
 export * from './recurring';
 export * from './loans';
+export * from './grow';
 export * from './cards';
 export * from './reconcile';
 export * from './dedupe';

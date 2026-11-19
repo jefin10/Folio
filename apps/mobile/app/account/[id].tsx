@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Dimensions, Text, View } from 'react-native';
-import { addMonths, categoryBreakdown, endOfMonth, formatMonth, groupOf, monthRange, startOfMonth } from '@folio/core';
+import { addMonths, categoryBreakdown, endOfMonth, formatMonth, groupOf, growGroupOf, growStats, monthRange, startOfMonth, formatDate, formatMoney } from '@folio/core';
 import { useCategories, useEntriesInRange, useObligations, usePosition, useToday } from '@folio/api';
 import { Bars } from '../../src/components/charts';
 import { Screen } from '../../src/components/Screen';
@@ -72,6 +72,43 @@ export default function AccountDetail() {
           </View>
         ))}
       </View>
+
+      {growGroupOf(owner) && (
+        <Section title={owner.type === 'fixed_deposit' || owner.type === 'recurring_deposit' ? 'Deposit' : 'Holdings'}>
+          <View style={{ paddingHorizontal: 20 }}>
+            <Plate style={{ padding: 16, gap: 10 }}>
+              {(() => {
+                const s = growStats(owner, bal);
+                const Row = ({ l, v, tone }: { l: string; v: string; tone?: string }) => (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ color: C.mute, fontFamily: F.semibold, fontSize: 13 }}>{l}</Text>
+                    <Text style={{ color: tone ?? C.chalk, fontFamily: F.extrabold, fontSize: 14, fontVariant: ['tabular-nums'] }}>{v}</Text>
+                  </View>
+                );
+                const rows: { l: string; v: string; tone?: string }[] = [];
+                if (s.group === 'market') {
+                  rows.push({ l: 'Invested', v: formatMoney(s.invested, { decimals: 0 }) });
+                  rows.push({ l: 'Now worth', v: formatMoney(s.value, { decimals: 0 }) });
+                  if (s.gain !== 0n || s.invested > 0n) {
+                    const pct = s.gainBps == null ? '' : ` (${s.gain >= 0n ? '+' : ''}${(s.gainBps / 100).toFixed(1)}%)`;
+                    rows.push({ l: s.gain >= 0n ? 'Gain so far' : 'Down so far', v: `${s.gain >= 0n ? '+' : '−'}${formatMoney(s.gain < 0n ? -s.gain : s.gain, { decimals: 0 })}${pct}`, tone: s.gain >= 0n ? C.mint : C.coral });
+                  }
+                  if (owner.grow?.sipFrequency) rows.push({ l: 'SIP', v: `${formatMoney(owner.grow.sipAmount ?? 0n, { decimals: 0 })} · ${owner.grow.sipFrequency}` });
+                } else {
+                  rows.push({ l: 'Invested', v: formatMoney(s.invested, { decimals: 0 }) });
+                  if (owner.grow?.interestRateBps != null) rows.push({ l: 'Rate', v: `${(owner.grow.interestRateBps / 100).toFixed(owner.grow.interestRateBps % 100 ? 2 : 0)}% p.a.` });
+                  if (owner.type === 'recurring_deposit' && owner.grow?.principalAmount) rows.push({ l: 'Installment', v: `${formatMoney(owner.grow.principalAmount, { decimals: 0 })} / month` });
+                  if (owner.grow?.tenureMonths) rows.push({ l: 'Tenure', v: `${owner.grow.tenureMonths} months` });
+                  if (s.maturityOn) rows.push({ l: 'Matures on', v: formatDate(s.maturityOn) });
+                  if (s.maturityValue != null) rows.push({ l: 'Maturity value', v: formatMoney(s.maturityValue, { decimals: 0 }) });
+                  if (s.interestTotal != null) rows.push({ l: 'Interest at maturity', v: `+${formatMoney(s.interestTotal, { decimals: 0 })}`, tone: C.mint });
+                }
+                return rows.map((r, i) => <Row key={i} {...r} />);
+              })()}
+            </Plate>
+          </View>
+        </Section>
+      )}
 
       <Section title="This month">
         <View style={{ paddingHorizontal: 20, gap: 10 }}>
